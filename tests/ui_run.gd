@@ -53,4 +53,4 @@ func run()->void:
 	game.show_people(); check(game.modal_layer.visible,"Vizinhança"); game.close_modal()
 	game.show_inventory(); check(game.modal_layer.visible,"Inventário"); game.close_modal()
 	game.show_map(); check(game.modal_layer.visible,"Destinos"); game.close_modal()
-	print("RESULTADO UI: %d verificações, %d falhas"%[total,failures]); game.queue_free(); await create_timer(.15).timeout; quit(1 if failures>0 else 0)
+	print("RESULTADO UI: %d verificações, %d falhas"%[total,failures]); game.music.stop(); await create_timer(.2).timeout; game.queue_free(); await create_timer(.15).timeout; quit(1 if failures>0 else 0)

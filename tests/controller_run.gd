@@ -86,4 +86,4 @@ func run()->void:
 	await press(JOY_BUTTON_A); check(game.sim.working,"A confirma ida ao trabalho")
 	game.pad.connection_changed(0,false)
 	check(game.sim.speed==0 and game.pad.axes.is_empty(),"Desconexão interrompe movimento e pausa")
-	print("RESULTADO CONTROLE: %d verificações, %d falhas"%[checks,failures]); game.queue_free(); await create_timer(.15).timeout; quit(1 if failures else 0)
+	print("RESULTADO CONTROLE: %d verificações, %d falhas"%[checks,failures]); game.music.stop(); await create_timer(.2).timeout; game.queue_free(); await create_timer(.15).timeout; quit(1 if failures else 0)
