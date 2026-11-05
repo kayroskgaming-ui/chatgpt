@@ -1,0 +1,62 @@
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS · Entrada da casa acessível
+PASS · Vizinha bloqueada sem convite
+PASS · Convite autoriza entrada
+PASS · Parede sólida
+PASS · Móvel sólido
+PASS · Rota adjacente sem atravessar obstáculos
+PASS · Dormir recupera energia
+PASS · Levantar permite caminhar
+PASS · Comer consome uma marmita
+PASS · Objeto funcional: shower
+PASS · Objeto funcional: toilet
+PASS · Objeto funcional: sofa
+PASS · Falha libera fila e permite próxima ação
+PASS · Sem alimento não há estoque negativo
+PASS · Cancelar libera reservas
+PASS · Lanche cobra V$ 12 uma vez
+PASS · Sem saldo não compra
+PASS · Loja fechada não vende
+PASS · Vizinha em casa aceita visita
+PASS · Vizinha pode recusar
+PASS · Conversa melhora amizade
+PASS · 3× não perde aviso de turno
+PASS · Adiar não reabre imediatamente
+PASS · Adiamento dura 15 minutos
+PASS · Transporte ao trabalho
+PASS · Turno termina e paga uma vez
+PASS · Acelerar não duplica salário
+PASS · Falta sem pagamento
+PASS · Um dia completo em 3×
+PASS · Save atômico
+PASS · Carregar save
+PASS · Preservar estado, fila e rota
+PASS · Histórico financeiro persistente
+PASS · Cópia anterior preservada
+PASS · Recuperação de save corrompido
+PASS · Carregar turno não duplica salário
+PASS · Carregar refeição não consome outro item
+PASS · Save com aparência inválida rejeitado
+PASS · Traços afetam necessidades
+PASS · Amizades separadas
+RESULTADO: 40 verificações, 0 falhas
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS UI · Menu inicial
+PASS UI · Criar personagem
+PASS UI · Iniciar história
+PASS UI · Simulação iniciada
+PASS UI · Fechar tutorial
+PASS UI · Entrar remove telhado
+PASS UI · Pose usa ponto do móvel
+PASS UI · Sair restaura telhado
+PASS UI · Configurações
+PASS UI · Pop-up do turno
+PASS UI · Ir agora funcional
+PASS UI · Transporte inicia turno
+PASS UI · Fim do turno e pagamento
+PASS UI · Vizinhança
+PASS UI · Inventário
+PASS UI · Destinos
+RESULTADO UI: 16 verificações, 0 falhas
