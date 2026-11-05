@@ -6,7 +6,12 @@ var camera:=Vector2.ZERO
 var pan:=Vector2.ZERO
 var zoom_level:=1
 var zooms:=[0.85,1.15,1.5,1.85]
-var roof_alpha:={"home":1.0,"bia":1.0,"cafe":1.0}
+var roof_alpha:={"home":1.0,"bia":1.0,"caio":1.0,"cafe":1.0}
+var door_open:={}
+var npc_positions:={}
+var previous_visual:=Vector2.ZERO
+var walking:=false
+var highlight:=Vector2i(-1,-1)
 var visual_position:=Vector2.ZERO
 var debug:=false
 var following:=true
@@ -24,7 +29,22 @@ func _ready()->void:
 	visual_position=Vector2(sim.cell); camera=iso(visual_position)
 func _process(delta:float)->void:
 	elapsed+=delta*sim.speed
-	visual_position=visual_position.move_toward(Vector2(sim.cell),delta*7*maxi(1,sim.speed))
+	previous_visual=visual_position
+	var difference:=Vector2(sim.cell)-visual_position
+	if difference.length()>5: visual_position=Vector2(sim.cell)
+	else: visual_position=visual_position.move_toward(Vector2(sim.cell),delta*9*maxi(1,sim.speed))
+	walking=visual_position.distance_to(previous_visual)>0.0001
+	for npc in sim.npcs:
+		var old:Vector2=npc_positions.get(npc.id,Vector2(npc.cell))
+		npc_positions[npc.id]=old.move_toward(Vector2(npc.cell),delta*7*maxi(1,sim.speed))
+	var doors:Array=CityData.INNER_DOORS.duplicate()
+	for home in CityData.HOMES: doors.append(home.door)
+	for at in doors:
+		var building_id:=CityData.building_at(at)
+		var near:=Vector2(at).distance_to(Vector2(sim.cell))<1.5 and CityData.can_enter(building_id,"player",sim.invited)
+		for npc in sim.npcs:
+			if Vector2(at).distance_to(Vector2(npc.cell))<1.5 and CityData.can_enter(building_id,npc.id,false): near=true
+		door_open[at]=move_toward(door_open.get(at,0.0),1.0 if near else 0.0,delta*5)
 	if following: camera=camera.lerp(iso(visual_position),1-exp(-delta*6))
 	for h in CityData.HOMES:
 		roof_alpha[h.id]=move_toward(roof_alpha[h.id],0.0 if h.rect.has_point(sim.cell) else 1.0,delta*3)
@@ -60,6 +80,9 @@ func _draw()->void:
 			if x>=4 and x<=10 and y>=18 and y<=22: c=Color("a6a680")
 			var building:=CityData.building_at(cell)
 			if building!="": c=Color("b9a486") if (x+y)%2==0 else Color("b19c80")
+			if building=="home":
+				for room in CityData.ROOMS:
+					if room.rect.has_point(cell): c=room.color.lightened(0.03 if (x+y)%2==0 else 0.0)
 			diamond(p,c)
 			if road and y==13 and x%3==0 and x not in [12,13,14,15]: diamond(p,Color("d9cd9f"),Vector2(10,2))
 			if pavement: draw_line(p+Vector2(0,11),p+Vector2(22,0),Color("889d91"),1)
@@ -71,10 +94,23 @@ func _draw()->void:
 			for x in range(r.position.x,r.end.x):
 				if x==r.position.x or y==r.position.y: box(iso(Vector2(x,y)),24,12,28,h.color)
 		var door:=iso(Vector2(h.door)); diamond(door,Color("dfc994")); text_at(door+Vector2(-35,27),"ENTRADA",9)
+	for at in CityData.INNER_WALLS:
+		box(iso(Vector2(at)),24,12,9 if roof_alpha.home<0.5 else 28,Color("c9b28c"))
+	for at in CityData.INNER_DOORS:
+		var p:=iso(Vector2(at)); diamond(p,Color("d9c492"))
+		var opened:float=door_open.get(at,0.0)
+		box(p+Vector2(opened*17,-2),4,7,17,Color(0.43,0.35,0.25,1.0-opened*0.65))
+	if roof_alpha.home<0.1:
+		for room in CityData.ROOMS: text_at(iso(Vector2(room.rect.position))+Vector2(-20,23),room.name.to_upper(),8,Color("5c6156"))
 	var items:Array=[]
 	for o in CityData.OBJECTS: items.append({"type":"object","at":Vector2(o.cell),"data":o})
 	for t in CityData.TREES: items.append({"type":"tree","at":Vector2(t)})
-	for n in sim.npcs: items.append({"type":"npc","at":Vector2(n.cell),"data":n})
+	for n in sim.npcs:
+		var at:Vector2=npc_positions.get(n.id,Vector2(n.cell))
+		if n.get("action",{}).get("started",false):
+			var object:=CityData.object_by_id(n.action.id)
+			if object.kind in ["bed","sofa","shower","toilet","bench"]: at=Vector2(object.cell)
+		items.append({"type":"npc","at":at,"data":n})
 	var player_at:=visual_position
 	if sim.current.get("kind","")=="object" and sim.current.get("arrived",false):
 		var o:=CityData.object_by_id(sim.current.id)
@@ -90,8 +126,9 @@ func _draw()->void:
 			"tree": draw_tree(p)
 			"object": draw_object(p,item.data)
 			"player": draw_person(p,sim.skin,sim.outfit,true)
-			"npc": draw_person(p,2 if item.data.id=="bia" else 0,1 if item.data.id=="bia" else 2,false)
+			"npc": draw_person(p,2 if item.data.id=="bia" else 0,1 if item.data.id=="bia" else 2,false,item.data)
 	for h in CityData.HOMES: draw_roof(h)
+	if highlight.x>=0: diamond(iso(Vector2(highlight)),Color(0.9,0.95,0.6,0.4),Vector2(22,11))
 	for t in [Vector2(4,18),Vector2(10,22),Vector2(17,11),Vector2(27,16)]:
 		var p:=iso(t); box(p,10,5,5,Color("a66a53"))
 		for k in range(5): draw_rect(Rect2(p+Vector2(k*4-9,-9-(k%2)*3),Vector2(3,4)),Color("e4ab9d") if k%2 else Color("e8d484"))
@@ -125,7 +162,7 @@ func draw_object(p:Vector2,o:Dictionary)->void:
 			box(p,14,8,38,Color("c2d1c5")); draw_line(p+Vector2(0,-26),p+Vector2(13,-33),Color("78948e"),2); draw_rect(Rect2(p+Vector2(5,-23),Vector2(2,7)),Color("536c68"))
 		"shower":
 			box(p,18,9,3,Color("d9d4b9")); draw_rect(Rect2(p+Vector2(-10,-40),Vector2(3,34)),Color("769d9c")); draw_line(p+Vector2(-9,-40),p+Vector2(7,-40),Color("c6d3c8"),3)
-			if sim.current.get("id","")==o.id and sim.current.get("arrived",false):
+			if object_active(o.id):
 				for i in range(7): draw_rect(Rect2(p+Vector2((i*7)%22-10,-35+fmod(elapsed*20+i*6,30)),Vector2(1,5)),Color("b9dee0"))
 		"toilet":
 			box(p+Vector2(0,-10),10,5,17,Color("cdd9cf")); box(p,12,7,8,Color("e2e4d2")); diamond(p+Vector2(0,-9),Color("667c78"),Vector2(7,3))
@@ -136,18 +173,28 @@ func draw_object(p:Vector2,o:Dictionary)->void:
 		"counter":
 			box(p,22,11,22,Color("a97955")); box(p+Vector2(0,-22),24,12,3,Color("d7cba6")); box(p+Vector2(3,-27),8,4,11,Color("536665"))
 	if debug: text_at(p+Vector2(-18,-45),o.id,10)
-func draw_person(p:Vector2,skin:int,clothes:int,player:bool)->void:
+func draw_person(p:Vector2,skin:int,clothes:int,player:bool,npc:Dictionary={})->void:
 	var act:String=sim.current.get("id","") if player and sim.current.get("arrived",false) and sim.current.get("kind","")=="object" else ""
+	if not player and npc.get("action",{}).get("started",false): act=npc.action.id
+	var kind:=CityData.object_by_id(act).get("kind","") as String
+	var direction:Vector2i=sim.facing if player else npc.get("facing",Vector2i.DOWN)
+	var is_walking:bool=walking if player else not npc.get("route",[]).is_empty()
 	diamond(p,Color(0.1,0.15,0.16,0.3),Vector2(9,4))
-	if act=="bed":
+	if kind=="bed":
 		draw_rect(Rect2(p+Vector2(-13,-13),Vector2(22,8)),CLOTHES[clothes]); draw_rect(Rect2(p+Vector2(-19,-16),Vector2(8,8)),SKINS[skin]); text_at(p+Vector2(0,-28),"z Z",12)
 	else:
-		var bob:=int(sin(elapsed*8)*2) if player and not sim.route.is_empty() else 0
-		var h:=7 if act in ["sofa","table","bench","toilet"] else 0
+		var bob:=int(sin(elapsed*8)*2) if is_walking else 0
+		var h:=7 if kind in ["sofa","table","bench","toilet"] else 0
 		draw_rect(Rect2(p+Vector2(-5,-9+h),Vector2(4,9)),Color("324959")); draw_rect(Rect2(p+Vector2(2,-9+h+bob),Vector2(4,9-bob)),Color("324959")); draw_rect(Rect2(p+Vector2(-7,-22+h),Vector2(14,14)),CLOTHES[clothes])
 		draw_rect(Rect2(p+Vector2(-9,-20+h-bob),Vector2(3,10)),SKINS[skin]); draw_rect(Rect2(p+Vector2(7,-20+h+bob),Vector2(3,10)),SKINS[skin]); draw_rect(Rect2(p+Vector2(-6,-33+h),Vector2(12,12)),SKINS[skin])
-		draw_rect(Rect2(p+Vector2(-7,-35+h),Vector2(14,5)),HAIRS[sim.hair] if player else Color("493a3d")); draw_rect(Rect2(p+Vector2(2,-28+h),Vector2(2,2)),Color("343b3e"))
-		if act in ["fridge","counter"]: draw_rect(Rect2(p+Vector2(7,-24),Vector2(7,5)),Color("e3b86e"))
+		draw_rect(Rect2(p+Vector2(-7,-35+h),Vector2(14,5)),HAIRS[sim.hair] if player else Color("493a3d")); draw_rect(Rect2(p+Vector2(2 if direction.x>=0 else -4,-28+h),Vector2(2,2)),Color("343b3e"))
+		if direction.y<0 and direction.x<=0: draw_rect(Rect2(p+Vector2(-6,-31+h),Vector2(12,8)),HAIRS[sim.hair] if player else Color("493a3d"))
+		if kind in ["fridge","counter"]:
+			var lift:=sin(elapsed*3)*2; draw_rect(Rect2(p+Vector2(5,-24+lift),Vector2(7,5)),Color("e3b86e"))
+		if kind in ["sofa","bench"]:
+			draw_rect(Rect2(p+Vector2(-6,-17),Vector2(12,7)),Color("e9d8a6")); draw_line(p+Vector2(0,-17),p+Vector2(0,-10),Color("8a7561"),1)
+		if (player and sim.current.get("kind","")=="social" and sim.route.is_empty()) or (not player and npc.get("state","")=="Conversando"):
+			text_at(p+Vector2(9,-40),"···",14)
 	if player: diamond(p+Vector2(0,-49),Color("dcefa7"),Vector2(5,7))
 func draw_roof(h:Dictionary)->void:
 	var alpha:float=roof_alpha[h.id]
@@ -161,7 +208,7 @@ func draw_roof(h:Dictionary)->void:
 				var glass:=Color("577c87"); glass.a=alpha
 				draw_colored_polygon(PackedVector2Array([p+Vector2(-21,-23),p+Vector2(-4,-14),p+Vector2(-4,-3),p+Vector2(-21,-12)]),glass)
 		else:
-			var door_color:=Color("6b5d4c"); door_color.a=alpha
+			var door_color:=Color("6b5d4c"); door_color.a=alpha*(1.0-float(door_open.get(h.door,0.0)))
 			draw_colored_polygon(PackedVector2Array([p+Vector2(-18,-25),p+Vector2(-1,-16),p+Vector2(-1,9),p+Vector2(-18,0)]),door_color)
 	for y in range(r.position.y,r.end.y-1):
 		var p:=iso(Vector2(r.end.x-1,y)); box(p,24,12,28,color)
@@ -179,4 +226,10 @@ func draw_roof(h:Dictionary)->void:
 		var f:=float(i)/(r.size.x*2); draw_line(ridge_a.lerp(ridge_b,f),d.lerp(c,f),line,2)
 	var plaque:=iso(Vector2(h.door))+Vector2(-50,-35); var sign_color:=Color("223b42"); sign_color.a=alpha
 	draw_rect(Rect2(plaque+Vector2(-4,-14),Vector2(138,22)),sign_color)
-	text_at(plaque,"CAFÉ DA ESQUINA" if h.id=="cafe" else ("RUA IPÊ, 12 · SEU LAR" if h.id=="home" else "RUA IPÊ, 18 · BIA"),10,Color(1,0.94,0.8,alpha))
+	text_at(plaque,"CAFÉ DA ESQUINA" if h.id=="cafe" else ("RUA IPÊ, 12 · SEU LAR" if h.id=="home" else ("RUA IPÊ, 18 · BIA" if h.id=="bia" else "RUA IPÊ, 24 · CAIO")),10,Color(1,0.94,0.8,alpha))
+
+func object_active(id:String)->bool:
+	if sim.current.get("id","")==id and sim.current.get("arrived",false): return true
+	for npc in sim.npcs:
+		if npc.get("action",{}).get("id","")==id and npc.action.get("started",false): return true
+	return false

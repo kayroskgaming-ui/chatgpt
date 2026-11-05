@@ -20,7 +20,7 @@ func run()->void:
 	check(not CityData.path(s.cell,Vector2i(19,7),"player",true).is_empty(),"Convite autoriza entrada")
 	check(not CityData.walkable(Vector2i(3,5)),"Parede sólida")
 	check(not CityData.walkable(Vector2i(4,4)),"Móvel sólido")
-	var path:=CityData.path(Vector2i(7,11),Vector2i(7,4)); var previous:=Vector2i(7,11); var valid:=true
+	var path:=CityData.path(Vector2i(7,11),Vector2i(8,4)); var previous:=Vector2i(7,11); var valid:=true
 	for at in path:
 		valid=valid and CityData.walkable(at) and absi(at.x-previous.x)+absi(at.y-previous.y)==1; previous=at
 	check(valid and not path.is_empty(),"Rota adjacente sem atravessar obstáculos")
@@ -45,7 +45,7 @@ func run()->void:
 	var social:=LifeSimulation.new(); social.minutes=490; social.cell=Vector2i(19,10); social.ring_bell(); idle(social)
 	check(social.invited,"Vizinha em casa aceita visita")
 	social.invited=false; social.friendship=0; social.ring_bell(); idle(social); check(not social.invited,"Vizinha pode recusar")
-	social.minutes=1100; social.cell=Vector2i(18,7); social.npcs[0].cell=Vector2i(19,7); var before:=social.friendship; social.enqueue_social("bia"); idle(social)
+	social.minutes=1100; social.invited=true; social.cell=Vector2i(18,7); social.npcs[0].cell=Vector2i(19,7); var before:=social.friendship; social.enqueue_social("bia"); idle(social)
 	check(social.friendship>before,"Conversa melhora amizade")
 	var worker:=LifeSimulation.new(); worker.minutes=509; worker.speed=3; worker.tick(20)
 	check(worker.shift_prompt and worker.minutes>=540 and worker.minutes<542,"3× não perde aviso de turno")

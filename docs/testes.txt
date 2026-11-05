@@ -60,3 +60,85 @@ PASS UI · Vizinhança
 PASS UI · Inventário
 PASS UI · Destinos
 RESULTADO UI: 16 verificações, 0 falhas
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS COTIDIANO · Sete células em menos de 1,25 s a 1×
+PASS COTIDIANO · Velocidade tem duração, sem teletransporte
+PASS COTIDIANO · Movimento direto não depende da taxa de frames
+PASS COTIDIANO · Analógico contínuo pode dar o próximo passo
+PASS COTIDIANO · Diagonal não corta o canto de uma parede
+PASS COTIDIANO · Todos os móveis têm ponto de uso alcançável pela porta
+PASS COTIDIANO · Casa possui ambientes distintos
+PASS COTIDIANO · Divisória sólida: (6, 4)
+PASS COTIDIANO · Divisória sólida: (4, 6)
+PASS COTIDIANO · Divisória sólida: (5, 6)
+PASS COTIDIANO · Divisória sólida: (8, 6)
+PASS COTIDIANO · Divisória sólida: (8, 8)
+PASS COTIDIANO · Divisória sólida: (9, 5)
+PASS COTIDIANO · Passagem interna livre: (6, 5)
+PASS COTIDIANO · Passagem interna livre: (8, 7)
+PASS COTIDIANO · Bia procura comida, consome estoque e recupera fome
+PASS COTIDIANO · Vizinha procura e usa chuveiro
+PASS COTIDIANO · Vizinha usa banheiro
+PASS COTIDIANO · Vizinha dorme para recuperar energia
+PASS COTIDIANO · NPCs se deslocam sem atravessar paredes, móveis ou jogador
+PASS COTIDIANO · Rotina noturna inclui dormir
+PASS COTIDIANO · Vizinhos procuram conversa entre si quando solitários
+PASS COTIDIANO · NPC reserva a própria cama
+PASS COTIDIANO · Cancelar jogador preserva reservas dos NPCs
+PASS COTIDIANO · Jogador não usa móvel ocupado por NPC
+PASS COTIDIANO · Fim do expediente escolhe uma saída sem sobrepor morador
+PASS COTIDIANO · Save v2 de vizinho em atividade pode carregar
+PASS COTIDIANO · Atividade, estoque e reserva de NPC persistem
+PASS COTIDIANO · Atividade do NPC continua após carregar
+PASS COTIDIANO · Save v1 mantém personagem e dinheiro
+PASS COTIDIANO · Migração inicializa novas rotinas sem duplicar moradores
+PASS COTIDIANO · Save antigo é reposicionado e ganha rota válida nas novas divisórias
+PASS COTIDIANO · Replanejar refeição antiga não consome comida novamente
+PASS COTIDIANO · Dia completo 1×: exploração, aviso e salário único
+PASS COTIDIANO · Dia 1×: comer, higiene, banheiro e visita sem fila presa
+PASS COTIDIANO · Dia 1×: necessidades dos vizinhos permanecem válidas
+PASS COTIDIANO · Dia completo 2×: exploração, aviso e salário único
+PASS COTIDIANO · Dia 2×: comer, higiene, banheiro e visita sem fila presa
+PASS COTIDIANO · Dia 2×: necessidades dos vizinhos permanecem válidas
+PASS COTIDIANO · Dia completo 3×: exploração, aviso e salário único
+PASS COTIDIANO · Dia 3×: comer, higiene, banheiro e visita sem fila presa
+PASS COTIDIANO · Dia 3×: necessidades dos vizinhos permanecem válidas
+RESULTADO COTIDIANO: 42 verificações, 0 falhas
+Godot Engine v4.6.3.stable.official.7d41c59c4 - https://godotengine.org
+
+PASS CONTROLE · Menu inicial tem foco
+PASS CONTROLE · A abre criador e foca nome
+PASS CONTROLE · A abre teclado de nome sem teclado físico
+PASS CONTROLE · Teclado na tela escreve pelo controle
+PASS CONTROLE · B fecha teclado e restaura foco
+PASS CONTROLE · Direcional percorre campos do criador
+PASS CONTROLE · A confirma criação e abre tutorial
+PASS CONTROLE · A fecha tutorial e permite jogar
+PASS CONTROLE · Zona morta evita movimento involuntário
+PASS CONTROLE · Analógico esquerdo move o personagem
+PASS CONTROLE · Direcional também move no bairro
+PASS CONTROLE · RB acelera
+PASS CONTROLE · LB reduz velocidade
+PASS CONTROLE · View pausa
+PASS CONTROLE · View retoma
+PASS CONTROLE · RT aproxima câmera
+PASS CONTROLE · LT afasta câmera
+PASS CONTROLE · Analógico direito move cursor virtual
+PASS CONTROLE · Clique do analógico restaura câmera
+PASS CONTROLE · Y abre destinos com foco
+PASS CONTROLE · B volta do menu
+PASS CONTROLE · A abre interação na entrada próxima
+PASS CONTROLE · Menu de interação foca ação válida
+PASS CONTROLE · A confirma Entrar e cria caminhada real
+PASS CONTROLE · X lista interações próximas
+PASS CONTROLE · Lista de ações foca botão acessível ao controle
+PASS CONTROLE · Controle seleciona alvo na lista de ações
+PASS CONTROLE · B cancela ações no bairro
+PASS CONTROLE · Start abre menu completo
+PASS CONTROLE · Start retorna ao jogo
+PASS CONTROLE · Turno pode ser decidido pelo controle
+PASS CONTROLE · B não fecha indevidamente a decisão de trabalho
+PASS CONTROLE · A confirma ida ao trabalho
+PASS CONTROLE · Desconexão interrompe movimento e pausa
+RESULTADO CONTROLE: 34 verificações, 0 falhas

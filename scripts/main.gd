@@ -24,6 +24,10 @@ var previous_speed:=1
 var refresh_elapsed:=0.0
 var key_elapsed:=0.0
 var last_queue:=""
+var pad:ControllerSupport
+var name_keyboard:Control
+var name_field:LineEdit
+var name_preview:Label
 const CREAM=Color("eee4cd")
 const MINT=Color("b9d6b1")
 func _ready()->void:
@@ -34,6 +38,7 @@ func _ready()->void:
 	if DisplayServer.get_name()!="headless": music.play()
 	music.finished.connect(music.play)
 	log_message("Boas-vindas a Vila Aurora! Clique no chão para caminhar.")
+	pad=ControllerSupport.new(); pad.game=self; add_child(pad)
 	show_start()
 func style(bg:Color=Color("182d35"),border:Color=Color("3d5658"))->StyleBoxFlat:
 	var s:=StyleBoxFlat.new(); s.bg_color=bg; s.border_color=border; s.set_border_width_all(1); s.set_corner_radius_all(8)
@@ -90,10 +95,10 @@ func transition()->void:
 func _process(delta:float)->void:
 	if started: sim.tick(delta)
 	key_elapsed+=delta
-	if started and not modal_layer.visible and key_elapsed>0.13:
+	if started and not modal_layer.visible and not context.visible and key_elapsed>0.06:
 		var dx:=int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A)); var dy:=int(Input.is_physical_key_pressed(KEY_S))-int(Input.is_physical_key_pressed(KEY_W))
 		if dx!=0 or dy!=0:
-			var dir:=Vector2i(dx+dy,dy-dx); dir=Vector2i(signi(dir.x),0) if dir.x!=0 else Vector2i(0,signi(dir.y)); sim.manual_step(dir); key_elapsed=0
+			sim.manual_step(ControllerSupport.screen_direction(Vector2(dx,dy))); key_elapsed=0
 	refresh_elapsed+=delta
 	if refresh_elapsed>0.25: refresh_elapsed=0; refresh_hud()
 	if started and sim.minutes-sim.autosave_at>=180:
@@ -146,6 +151,7 @@ func on_cell(cell:Vector2i)->void:
 		for h in CityData.HOMES:
 			if h.id==building:
 				add_context(h.name,func(): pass,true)
+				if building=="caio": add_context("Casa particular · visitas ainda não disponíveis",func(): pass,true)
 				if building=="bia": add_context("Tocar campainha",func(): sim.ring_bell())
 				if CityData.can_enter(building,"player",sim.invited):
 					var inside:Vector2i=h.door+Vector2i.UP; add_context("Entrar",func(): sim.enqueue_move(inside))
@@ -159,12 +165,18 @@ func on_cell(cell:Vector2i)->void:
 	for o in CityData.OBJECTS:
 		if o.cell==cell:
 			context_actions.clear(); context.clear(); add_context(o.name,func(): pass,true); add_context(o.action,func(): sim.enqueue_object(o.id)); popup_context(); return
-	if CityData.walkable(cell,"player",sim.invited): sim.enqueue_move(cell)
+	if CityData.walkable(cell,"player",sim.invited):
+		if sim.current.get("kind","")=="move" and not Input.is_key_pressed(KEY_SHIFT): sim.cancel_all()
+		sim.enqueue_move(cell)
 	else: log_message("Caminho bloqueado. Use a entrada do imóvel.")
 func add_context(text:String,fn:Callable,disabled:bool=false)->void:
 	context.add_item(text,context_actions.size()); context.set_item_disabled(context_actions.size(),disabled); context_actions.append(fn)
 func popup_context()->void:
-	context.position=Vector2i(root.get_global_mouse_position()); context.popup()
+	context.position=Vector2i(pad.cursor_position if pad!=null and pad.active and pad.cursor_active else root.get_global_mouse_position())
+	if pad!=null and pad.active and not pad.cursor_active: context.position=Vector2i(world.offset()+world.iso(Vector2(sim.cell))*world.zooms[world.zoom_level])
+	context.popup()
+	for i in range(context.item_count):
+		if not context.is_item_disabled(i): context.set_focused_item(i); break
 func open_modal(title:String,subtitle:String="",pause:bool=true)->VBoxContainer:
 	if not modal_layer.visible:
 		previous_speed=sim.speed
@@ -173,15 +185,18 @@ func open_modal(title:String,subtitle:String="",pause:bool=true)->VBoxContainer:
 	var box:=VBoxContainer.new(); box.add_theme_constant_override("separation",12); modal_panel.add_child(box); box.add_child(label(title,25,MINT))
 	if subtitle!="":
 		var desc:=label(subtitle,14); desc.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART; desc.custom_minimum_size.x=560; box.add_child(desc)
-	modal_layer.show(); return box
-func close_modal()->void: modal_layer.hide(); sim.speed=previous_speed; refresh_hud()
+	modal_layer.show(); call_deferred("focus_modal"); return box
+func close_modal()->void:
+	modal_layer.hide(); sim.speed=previous_speed; refresh_hud()
+	var focused:=get_viewport().gui_get_focus_owner()
+	if focused: focused.release_focus()
 func close_button(box:Node)->void: button("Voltar ao bairro",close_modal,box)
 func show_start()->void:
 	var box:=open_modal("Uma vida começa aqui.","MINHA VIDA — HISTÓRIAS DA CIDADE\nBase jogável · Bairro Ipê, Vila Aurora")
 	box.add_child(label("Uma casa simples. Dois vizinhos. Muitas pequenas histórias."))
 	button("Criar meu personagem",show_creator,box)
 	button("Continuar jogo salvo",load_now,box).disabled=not FileAccess.file_exists(SaveStore.FILE) and not FileAccess.file_exists(SaveStore.FILE+".bak")
-	box.add_child(label("Arte procedural original provisória · versão reconstruída 0.1.1",12))
+	box.add_child(label("Arte procedural original provisória · versão 0.2.0 · controles e cotidiano",12))
 	button("Sair",quit_game,box)
 func option(title:String,values:Array,parent:Node,index:int=0)->OptionButton:
 	var row:=HBoxContainer.new(); parent.add_child(row); var l:=label(title); l.custom_minimum_size.x=180; row.add_child(l)
@@ -201,10 +216,11 @@ func show_creator()->void:
 	button("Voltar",show_start,box)
 func show_tutorial()->void:
 	var box:=open_modal("Seu primeiro dia no Bairro Ipê","1. Clique na casa e escolha Entrar. O telhado desaparece.\n2. Clique nos móveis para comer, dormir, ler e cuidar de si.\n3. Converse com vizinhos ou toque a campainha da Bia.\n4. Às 09:00, decida se vai ao trabalho. O transporte é automático.\n5. Há salvamento automático a cada 3 horas do jogo.")
-	box.add_child(label("Mouse: andar e interagir · roda: zoom · botão do meio: mover câmera\nWASD: andar · C: seguir · Espaço: pausa · 1/2/3: tempo\nX: cancelar · F5: salvar · F9: carregar · M: destinos · F3: depuração",13)); close_button(box)
+	box.add_child(label("Mouse: andar e interagir · roda: zoom · botão do meio: mover câmera\nWASD: andar · C: seguir · Espaço: pausa · 1/2/3: tempo\nX: cancelar · F5: salvar · F9: carregar · M: destinos · F3: depuração\nControle Xbox: analógico esquerdo anda · A interage · B cancela\nX ações · Y destinos · Start menu · View pausa · LB/RB tempo\nAnalógico direito: cursor · clique direito: seguir · LT/RT: zoom",13)); close_button(box)
 func show_menu()->void:
 	var box:=open_modal("Uma pausa na rotina")
 	button("Continuar",close_modal,box); button("Salvar jogo",save_now,box); button("Carregar jogo",load_now,box); button("Configurações",show_settings,box); button("Ajuda e controles",show_tutorial,box)
+	button("Trabalho e finanças",show_job,box); button("Inventário e personagem",show_inventory,box); button("Vizinhança e amizades",show_people,box); button("Destinos do bairro",show_map,box)
 	button("Novo jogo…",func():
 		var confirm:=open_modal("Começar outra história?","O progresso não salvo será descartado. O save só será substituído ao salvar.")
 		button("Sim, criar novo personagem",func():
@@ -255,6 +271,7 @@ func save_now()->void:
 func load_now()->void:
 	if SaveStore.load_game(sim):
 		started=true; modal_layer.hide(); apply_preferences(); follow(); transition(); log_message("História carregada.")
+		world.visual_position=Vector2(sim.cell)
 		if sim.shift_prompt: show_shift()
 	else: log_message("Nenhum save válido, inclusive na cópia de recuperação.")
 func apply_preferences()->void:
@@ -266,3 +283,77 @@ func quit_game()->void:
 	music.stop(); await get_tree().create_timer(0.1).timeout; get_tree().quit()
 func _exit_tree()->void:
 	if is_instance_valid(music): music.stop(); music.stream=null
+
+func focusable_controls(node:Node)->Array[Control]:
+	var result:Array[Control]=[]
+	for child in node.get_children():
+		if child is Control and child.focus_mode!=Control.FOCUS_NONE and not (child is BaseButton and child.disabled): result.append(child)
+		result.append_array(focusable_controls(child))
+	return result
+
+func focus_modal()->void:
+	var controls:=focusable_controls(modal_panel)
+	if controls.is_empty(): return
+	for i in range(controls.size()):
+		controls[i].focus_neighbor_top=controls[i].get_path_to(controls[(i-1+controls.size())%controls.size()])
+		controls[i].focus_neighbor_bottom=controls[i].get_path_to(controls[(i+1)%controls.size()])
+	controls[0].grab_focus()
+
+func interaction_targets()->Array:
+	var targets:Array=[]
+	var building:=CityData.building_at(sim.cell)
+	for npc in sim.npcs:
+		if CityData.building_at(npc.cell)==building and Vector2(npc.cell-sim.cell).length()<8:
+			targets.append({"cell":npc.cell,"name":npc.name+" · "+npc.state})
+	for object in CityData.OBJECTS:
+		if object.home==building: targets.append({"cell":object.cell,"name":object.name})
+	if building=="":
+		for home in CityData.HOMES:
+			if Vector2(home.door-sim.cell).length()<8: targets.append({"cell":home.door,"name":home.name})
+	targets.sort_custom(func(a,b): return Vector2(a.cell-sim.cell).length_squared()<Vector2(b.cell-sim.cell).length_squared())
+	return targets
+
+func interact_nearest()->void:
+	var targets:=interaction_targets()
+	if targets.is_empty() or Vector2(targets[0].cell-sim.cell).length()>3.5:
+		log_message("Aproxime-se de um móvel, vizinho ou entrada. X mostra as ações próximas."); return
+	on_cell(targets[0].cell)
+
+func show_nearby()->void:
+	var targets:=interaction_targets()
+	var box:=open_modal("Interagir por perto","Escolha um objeto, vizinho ou entrada. A: escolher · B: voltar.")
+	var scroll:=ScrollContainer.new(); scroll.custom_minimum_size=Vector2(560,280); box.add_child(scroll)
+	var list:=VBoxContainer.new(); list.size_flags_horizontal=Control.SIZE_EXPAND_FILL; scroll.add_child(list)
+	for target in targets:
+		button(target.name,func(): close_modal(); on_cell(target.cell),list)
+	if targets.is_empty(): list.add_child(label("Não há interações próximas."))
+	close_button(box)
+
+func show_name_keyboard(field:LineEdit)->void:
+	name_field=field
+	name_keyboard=Control.new(); modal_layer.add_child(name_keyboard); name_keyboard.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var dim:=ColorRect.new(); name_keyboard.add_child(dim); dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); dim.color=Color(0.02,0.05,0.08,0.92)
+	var center:=CenterContainer.new(); name_keyboard.add_child(center); center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var panel:=PanelContainer.new(); center.add_child(panel); var box:=VBoxContainer.new(); panel.add_child(box)
+	box.add_child(label("Nome do personagem",24,MINT)); name_preview=label(field.text,20); box.add_child(name_preview)
+	var grid:=GridContainer.new(); grid.columns=10; box.add_child(grid)
+	for character in "ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚÃÕÇ0123456789":
+		button(character,func():
+			if name_field.text.length()<26: name_field.text+=character; name_preview.text=name_field.text,grid)
+	button("Espaço",func():
+		if name_field.text.length()<26: name_field.text+=" "; name_preview.text=name_field.text,box)
+	button("Apagar letra",func(): name_field.text=name_field.text.left(-1); name_preview.text=name_field.text,box)
+	button("Concluir · B voltar",close_name_keyboard,box)
+	var keys:=focusable_controls(name_keyboard)
+	for i in range(keys.size()):
+		var top:=maxi(0,i-10) if i<grid.get_child_count() else i-1
+		var bottom:=mini(keys.size()-1,i+10) if i<grid.get_child_count() else mini(keys.size()-1,i+1)
+		keys[i].focus_neighbor_top=keys[i].get_path_to(keys[top])
+		keys[i].focus_neighbor_bottom=keys[i].get_path_to(keys[bottom])
+		keys[i].focus_neighbor_left=keys[i].get_path_to(keys[maxi(0,i-1)])
+		keys[i].focus_neighbor_right=keys[i].get_path_to(keys[mini(keys.size()-1,i+1)])
+	grid.get_child(0).call_deferred("grab_focus")
+
+func close_name_keyboard()->void:
+	if name_keyboard: name_keyboard.queue_free(); name_keyboard=null
+	if is_instance_valid(name_field): name_field.grab_focus()

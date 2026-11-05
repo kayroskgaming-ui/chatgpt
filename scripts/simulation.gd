@@ -22,7 +22,12 @@ var cell:=Vector2i(7,11)
 var queue:Array=[]
 var current:Dictionary={}
 var route:Array[Vector2i]=[]
+const WALK_MINUTES=0.28 # 0.14 real seconds per tile at 1×.
 var step_elapsed:=0.0
+var direct_cooldown:=0.0
+var facing:=Vector2i.DOWN
+var visit_until:=-1.0
+var npc_system:=NeighborhoodSimulation.new()
 var autonomous:=false
 var need_rate:=1.0
 var invited:=false
@@ -51,6 +56,7 @@ var audio_volume:=-24.0
 var audio_muted:=false
 func _init()->void:
 	npcs=[{"id":"bia","name":"Bia Nascimento","cell":Vector2i(19,7),"job":"Florista","state":"Em casa"},{"id":"caio","name":"Caio Alves","cell":Vector2i(12,15),"job":"Barista","state":"Na praça"}]
+	npc_system.ensure_state(self)
 func day()->int: return int(minutes/1440.0)
 func hour_minute()->int: return int(minutes)%1440
 func clock()->String: return "%02d:%02d"%[hour_minute()/60,hour_minute()%60]
@@ -78,6 +84,8 @@ func tick(seconds:float)->void:
 		advance_minute(delta); remaining-=delta
 func advance_minute(delta:float)->void:
 	minutes+=delta
+	direct_cooldown=maxf(0,direct_cooldown-delta)
+	if invited and visit_until>=0 and minutes>=visit_until and CityData.building_at(cell)!="bia": invited=false
 	for i in range(6):
 		var rate:float=DECAY[i]*need_rate
 		if working and i==1: rate*=[1.6,2.8,0.8][work_style]
@@ -89,8 +97,7 @@ func advance_minute(delta:float)->void:
 	else:
 		advance_actions(delta)
 		if autonomous and current.is_empty() and queue.is_empty(): choose_autonomy()
-	npc_tick+=delta
-	if npc_tick>=6: npc_tick=0; update_npcs()
+	npc_system.tick(self,delta)
 	changed.emit()
 func check_shift()->void:
 	var d:=day(); var hm:=hour_minute()
@@ -114,7 +121,9 @@ func answer_shift(choice:int)->void:
 	changed.emit()
 func start_work()->void:
 	cancel_all(); shift_prompt=false; shift_day=day(); working=true
-	cell=Vector2i(24,20); work_end=day()*1440.0+780.0
+	for at in [Vector2i(24,20),Vector2i(23,20),Vector2i(24,22)]:
+		if not occupied(at): cell=at; break
+	work_end=day()*1440.0+780.0
 	current={"name":"Expediente · Café da Esquina","kind":"work","started":minutes}
 	notice.emit("Você chegou ao Café. O turno termina às 13:00.")
 func finish_work()->void:
@@ -125,7 +134,9 @@ func finish_work()->void:
 		add_transaction(int(round(120*served)),"Salário de barista · dia %d"%[d+1])
 		performance=clampf(performance+[4,9,1][work_style],0,100)
 		mood_cause="Expediente concluído; pagamento registrado"; mood_until=minutes+120
-	working=false; current={}; cell=Vector2i(23,24)
+	working=false; current={}
+	for at in [Vector2i(23,24),Vector2i(22,24),Vector2i(24,24)]:
+		if not occupied(at): cell=at; break
 	notice.emit("Turno concluído! Volte para casa ou explore o bairro.")
 func enqueue_move(target:Vector2i)->void:
 	if working: notice.emit("Aguarde o fim do expediente."); return
@@ -140,19 +151,35 @@ func ring_bell()->void:
 	if not working: queue.append({"kind":"bell","name":"Tocar campainha","target":Vector2i(19,10)}); changed.emit()
 func cancel_all()->void:
 	if working: return
-	reservations.clear(); current={}; queue.clear(); route.clear(); changed.emit()
+	if not current.is_empty() and reservations.get(current.get("id",""))=="player": reservations.erase(current.id)
+	current={}; queue.clear(); route.clear(); changed.emit()
 func cancel_index(index:int)->void:
 	if index>=0 and index<queue.size(): queue.remove_at(index); changed.emit()
+func occupied(at:Vector2i,except_id:String="player")->bool:
+	if except_id!="player" and at==cell: return true
+	for npc in npcs:
+		if npc.id!=except_id and npc.cell==at: return true
+	return false
 func nearest_use(target:Vector2i)->Vector2i:
+	var object:Dictionary={}
+	for o in CityData.OBJECTS:
+		if o.cell==target: object=o; break
+	var candidates:Array[Vector2i]=[]
+	if not object.is_empty(): candidates=CityData.use_points(object,"player",invited)
+	else:
+		for dir in [Vector2i.DOWN,Vector2i.RIGHT,Vector2i.LEFT,Vector2i.UP]:
+			var candidate:Vector2i=target+dir
+			if CityData.walkable(candidate,"player",invited): candidates.append(candidate)
 	var best:=Vector2i(-1,-1); var shortest:=9999
-	for dir in [Vector2i.DOWN,Vector2i.RIGHT,Vector2i.LEFT,Vector2i.UP]:
-		var candidate:Vector2i=target+dir
-		if candidate==cell: return cell
-		var p:=CityData.path(cell,candidate,"player",invited)
-		if not p.is_empty() and p.size()<shortest: best=candidate; shortest=p.size()
+	for at in candidates:
+		if occupied(at): continue
+		if at==cell: return cell
+		var path:=CityData.path(cell,at,"player",invited)
+		if not path.is_empty() and path.size()<shortest: best=at; shortest=path.size()
 	return best
 func fail_action(message:String)->void:
-	reservations.erase(current.get("id","")); current={}; route.clear(); notice.emit(message)
+	if reservations.get(current.get("id",""))=="player": reservations.erase(current.id)
+	current={}; route.clear(); notice.emit(message)
 func begin_next()->void:
 	if queue.is_empty(): return
 	current=queue.pop_front(); current["remaining"]=0.0
@@ -168,32 +195,45 @@ func begin_next()->void:
 		target=nearest_use(o.cell)
 		if target.x<0: fail_action("Não foi possível chegar ao móvel. A fila foi liberada."); return
 		reservations[o.id]="player"
+		current["use_cell"]=target
 	elif current.kind=="social":
 		var npc:=npc_by_id(current.id)
 		if npc.is_empty(): fail_action("Pessoa não encontrada."); return
+		if npc.get("state","")=="Dormindo": fail_action("Essa pessoa está dormindo. Volte mais tarde."); return
+		npc_system.release(self,npc)
 		target=nearest_use(npc.cell); current["remaining"]=20.0
 		if target.x<0: fail_action("Essa pessoa não está acessível agora."); return
 	if target!=cell:
 		route=CityData.path(cell,target,"player",invited)
 		if route.is_empty(): fail_action("Caminho bloqueado ou entrada sem autorização."); return
 	current["arrived"]=false
+	current["committed"]=false
+	step_elapsed=WALK_MINUTES # Start responding on the first simulation tick.
 func advance_actions(delta:float)->void:
 	if current.is_empty(): begin_next()
 	if current.is_empty(): return
 	if not route.is_empty():
 		step_elapsed+=delta
-		var duration:=1.1 if needs[1]<20 else 0.65
-		if step_elapsed>=duration:
+		var duration:=WALK_MINUTES*(1.35 if needs[1]<20 else 1.0)
+		while step_elapsed>=duration and not route.is_empty():
+			if occupied(route[0]):
+				current["waiting"]=float(current.get("waiting",0.0))+delta
+				if current.waiting>6: fail_action("Uma pessoa bloqueou a passagem. A fila foi liberada.")
+				return
+			current["waiting"]=0.0
 			step_elapsed-=duration
-			for npc in npcs:
-				if npc.cell==route[0]: fail_action("Uma pessoa está no caminho. Tente novamente."); return
-			cell=route.pop_front()
+			var next:Vector2i=route.pop_front(); facing=next-cell; cell=next
 		return
 	if not current.get("arrived",false):
 		current["arrived"]=true
 		if current.kind=="object":
-			if current.id=="fridge": food-=1
-			if current.cost>0: add_transaction(-int(current.cost),current.name)
+			var active:=CityData.object_by_id(current.id)
+			facing=active.cell-cell
+		if current.kind=="object":
+			if not current.get("committed",false):
+				if current.id=="fridge": food-=1
+				if current.cost>0: add_transaction(-int(current.cost),current.name)
+				current["committed"]=true
 	if current.kind=="object":
 		var o:=CityData.object_by_id(current.id)
 		needs[o.need]=clampf(needs[o.need]+o.gain*delta/o.minutes,0,100)
@@ -207,37 +247,23 @@ func complete_action()->void:
 	if current.kind=="bell":
 		var bia:=npc_by_id("bia")
 		if bia.is_empty() or CityData.building_at(bia.cell)!="bia": notice.emit("Bia está fora. Volte mais tarde.")
-		elif hour_minute()<480 or hour_minute()>1260: notice.emit("Bia está dormindo. Visita recusada.")
+		elif bia.get("state","")=="Dormindo" or hour_minute()<480 or hour_minute()>1260: notice.emit("Bia está dormindo. Visita recusada.")
 		elif friendship<10: notice.emit("Bia prefere descansar. Visita recusada.")
-		else: invited=true; notice.emit("Bia: Entre! Você está convidado.")
+		else: invited=true; visit_until=minutes+240; notice.emit("Bia: Entre! Você está convidado por quatro horas.")
 	elif current.kind=="social":
 		var gain:=7 if current.name=="Contar piada" else 5
 		if current.id=="bia": friendship=clampf(friendship+gain,0,100)
 		else: relationships[current.id]=clampf(relationships.get(current.id,0.0)+gain,0,100)
 		skills.carisma+=0.5; mood_cause="Uma boa conversa"; mood_until=minutes+120
 		notice.emit("Conversa concluída. A amizade aumentou.")
-	reservations.erase(current.get("id","")); current={}
+	if reservations.get(current.get("id",""))=="player": reservations.erase(current.id)
+	current={}
 func npc_by_id(id:String)->Dictionary:
 	for npc in npcs:
 		if npc.id==id: return npc
 	return {}
 func update_npcs()->void:
-	for npc in npcs:
-		if current.get("kind","")=="social" and current.id==npc.id: continue
-		var hm:=hour_minute(); var goal:Vector2i
-		if npc.id=="bia":
-			goal=Vector2i(19,7) if hm<600 or hm>=1080 else Vector2i(10,20)
-			npc.state="Em casa" if hm<600 or hm>=1080 else "Na praça"
-		else:
-			goal=Vector2i(24,21) if hm>=480 and hm<1080 else Vector2i(13,16)
-			npc.state="No Café" if hm>=480 and hm<1080 else "Na praça"
-		var p:=CityData.path(npc.cell,goal,npc.id,false)
-		if not p.is_empty() and p[0]!=cell:
-			var occupied:=false
-			for other in npcs:
-				if other.id!=npc.id and other.cell==p[0]: occupied=true
-			if not occupied: npc.cell=p[0]
-	if hour_minute()<420 and CityData.building_at(cell)!="bia": invited=false
+	npc_system.tick(self,6.0)
 func choose_autonomy()->void:
 	var lowest:=0
 	for i in range(6):
@@ -246,10 +272,13 @@ func choose_autonomy()->void:
 	var ids:=["fridge","bed","shower","toilet","","sofa"]
 	if lowest==4: enqueue_social("caio")
 	elif lowest!=0 or food>0: enqueue_object(ids[lowest])
-func manual_step(dir:Vector2i)->void:
-	if working or shift_prompt or speed==0: return
-	cancel_all()
+func manual_step(dir:Vector2i)->bool:
+	if working or shift_prompt or speed==0 or direct_cooldown>0 or dir==Vector2i.ZERO: return false
 	var target:=cell+dir
-	for npc in npcs:
-		if npc.cell==target: return
-	if CityData.walkable(target,"player",invited): cell=target; changed.emit()
+	if not CityData.walkable(target,"player",invited) or occupied(target): return false
+	if dir.x!=0 and dir.y!=0:
+		for side in [cell+Vector2i(dir.x,0),cell+Vector2i(0,dir.y)]:
+			if not CityData.walkable(side,"player",invited) or occupied(side): return false
+	cancel_all(); facing=dir; cell=target
+	direct_cooldown=WALK_MINUTES*Vector2(dir).length()*(1.35 if needs[1]<20 else 1.0)
+	changed.emit(); return true

@@ -1,3 +1,5 @@
 .godot/
 builds/
 *.tmp
+
+docs/capturas/*.import
